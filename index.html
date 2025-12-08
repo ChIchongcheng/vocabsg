@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单词学习系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .title {
+            font-size: 2.5em;
+            color: #4a5568;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .main-button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 20px 40px;
+            border-radius: 15px;
+            font-size: 1.3em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            min-width: 250px;
+        }
+
+        .main-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .main-button:active {
+            transform: translateY(-1px);
+        }
+
+        .main-button.disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .main-button.disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 20px;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 1em;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 class="title">单词学习系统</h1>
+        <p class="subtitle">选择学习模式开始您的学习之旅</p>
+
+        <div class="button-container">
+            <button class="main-button" id="startLearning" onclick="startLearning()">
+                开始学习
+            </button>
+
+            <button class="main-button disabled" id="clozeTest" disabled>
+                完形填空
+            </button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            正在加载题库...
+        </div>
+
+        <div class="status" id="status" style="display: none;"></div>
+    </div>
+
+    <!-- 引入 SheetJS 库用于解析 Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script>
+        // 不再需要 API_BASE，直接读取静态文件
+
+        async function startLearning() {
+            const loading = document.getElementById('loading');
+            const status = document.getElementById('status');
+            const startBtn = document.getElementById('startLearning');
+
+            try {
+                // 显示加载状态
+                loading.style.display = 'block';
+                startBtn.disabled = true;
+                startBtn.textContent = '加载中...';
+
+                // 1. 读取选择题 Excel
+                const questionsData = await readExcelFile('data/questions.xlsx');
+                // 为题目添加 ID (模拟数据库自增ID)
+                const choiceQuestions = questionsData.map((row, index) => ({
+                    id: index + 1,
+                    question: row.question,
+                    option_a: row.option_a,
+                    option_b: row.option_b,
+                    option_c: row.option_c,
+                    option_d: row.option_d,
+                    correct_answer: row.correct_answer
+                }));
+
+                // 2. 读取单词闪卡 Excel
+                const flashcardsData = await readExcelFile('data/flashcards.xlsx');
+
+                // 3. 处理数据关联：将闪卡与题目关联
+                const flashcards = [];
+
+                for (let i = 0; i < flashcardsData.length; i++) {
+                    const row = flashcardsData[i];
+                    let questionId = null;
+
+                    // 如果Excel中有question_id列，直接使用
+                    if (row.question_id) {
+                        questionId = parseInt(row.question_id);
+                    } else {
+                        // 通过搜索选择题中的选项来匹配question_id
+                        const matchResult = findMatchingQuestionId(row, choiceQuestions);
+                        questionId = matchResult.questionId;
+                    }
+
+                    flashcards.push({
+                        id: i + 1,
+                        word: row.word,
+                        meaning: row.meaning,
+                        example: row.example,
+                        explanation: row.explanation,
+                        part_of_speech: row.part_of_speech,
+                        question_id: questionId
+                    });
+                }
+
+                // 存储到本地存储
+                localStorage.setItem('choiceQuestions', JSON.stringify(choiceQuestions));
+                localStorage.setItem('flashcards', JSON.stringify(flashcards));
+                localStorage.setItem('answeredQuestions', JSON.stringify([]));
+
+                // 显示成功状态
+                loading.style.display = 'none';
+                status.style.display = 'block';
+                status.className = 'status success';
+                status.textContent = `题库加载成功！选择题: ${choiceQuestions.length} 道，单词: ${flashcards.length} 个`;
+
+                // 跳转到游戏页面
+                setTimeout(() => {
+                    window.location.href = 'game-interface.html'; // 相对路径
+                }, 1500);
+
+            } catch (error) {
+                console.error('加载题库失败:', error);
+                loading.style.display = 'none';
+                status.style.display = 'block';
+                status.className = 'status error';
+                status.textContent = '加载题库失败，请确保 /data 目录下存在 questions.xlsx 和 flashcards.xlsx 文件';
+
+                startBtn.disabled = false;
+                startBtn.textContent = '开始学习';
+            }
+        }
+
+        // 读取 Excel 文件辅助函数
+        async function readExcelFile(url) {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`无法读取文件: ${url}`);
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer);
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            return XLSX.utils.sheet_to_json(worksheet);
+        }
+
+        // 辅助函数：通过搜索选择题选项来匹配question_id (从后端逻辑移植)
+        function findMatchingQuestionId(flashcardRow, choiceQuestions) {
+            const word = flashcardRow.word;
+            const matchingQuestions = [];
+
+            // 遍历所有选择题，查找匹配的选项
+            for (const question of choiceQuestions) {
+                const options = [question.option_a, question.option_b, question.option_c, question.option_d];
+
+                // 只检查单词是否匹配任何选项
+                for (const option of options) {
+                    if (option && (
+                        option.toLowerCase().includes(word.toLowerCase()) ||
+                        word.toLowerCase().includes(option.toLowerCase()) ||
+                        option.toLowerCase() === word.toLowerCase()
+                    )) {
+                        matchingQuestions.push({
+                            id: question.id,
+                            question: question.question,
+                            matchedOption: option
+                        });
+                        break; // 找到匹配就跳出内层循环，避免同一题目重复匹配
+                    }
+                }
+            }
+
+            // 处理匹配结果
+            if (matchingQuestions.length === 0) {
+                return {
+                    questionId: null,
+                    matchedQuestions: []
+                };
+            } else {
+                return {
+                    questionId: matchingQuestions[0].id, // 使用第一个匹配的ID作为主要question_id
+                    matchedQuestions: matchingQuestions
+                };
+            }
+        }
+    </script>
+</body>
+
+</html>
