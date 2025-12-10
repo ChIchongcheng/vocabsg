@@ -175,6 +175,12 @@
 
                 // 1. 读取选择题 Excel
                 const questionsData = await readExcelFile('data/questions.xlsx');
+
+                // 调试信息：显示原始数据行数
+                console.log('📊 原始数据统计:');
+                console.log('questions.xlsx 原始行数:', questionsData.length);
+                console.log('前3条数据样例:', questionsData.slice(0, 3));
+
                 // 为题目添加 ID (模拟数据库自增ID)
                 const choiceQuestions = questionsData.map((row, index) => ({
                     id: index + 1,
@@ -188,6 +194,9 @@
 
                 // 2. 读取单词闪卡 Excel
                 const flashcardsData = await readExcelFile('data/flashcards.xlsx');
+
+                console.log('flashcards.xlsx 原始行数:', flashcardsData.length);
+                console.log('前3条数据样例:', flashcardsData.slice(0, 3));
 
                 // 3. 处理数据关联：将闪卡与题目关联
                 const flashcards = [];
@@ -221,11 +230,31 @@
                 localStorage.setItem('flashcards', JSON.stringify(flashcards));
                 localStorage.setItem('answeredQuestions', JSON.stringify([]));
 
+                // 计算统计信息
+                const questionCount = choiceQuestions.length;
+                const wordCount = flashcards.length;
+                const ratio = (wordCount / questionCount).toFixed(1);
+
+                // 检查数据是否合理（每道题应该有4个单词）
+                let statusMessage = `题库加载成功！\n`;
+                statusMessage += `📝 选择题: ${questionCount} 道\n`;
+                statusMessage += `📚 单词: ${wordCount} 个\n`;
+                statusMessage += `📊 比例: ${ratio} 个单词/题`;
+
+                // 如果比例不是4，显示警告
+                if (Math.abs(ratio - 4) > 0.5) {
+                    statusMessage += `\n\n⚠️ 警告：数据比例异常！\n`;
+                    statusMessage += `预期每道题有4个单词选项，但当前比例是 ${ratio}。\n`;
+                    statusMessage += `请检查 questions.xlsx 的数据结构。`;
+                }
+
+                console.log('✅ 数据加载完成:', { questionCount, wordCount, ratio });
+
                 // 显示成功状态
                 loading.style.display = 'none';
                 status.style.display = 'block';
                 status.className = 'status success';
-                status.textContent = `题库加载成功！选择题: ${choiceQuestions.length} 道，单词: ${flashcards.length} 个`;
+                status.textContent = statusMessage;
 
                 // 跳转到游戏页面
                 setTimeout(() => {
